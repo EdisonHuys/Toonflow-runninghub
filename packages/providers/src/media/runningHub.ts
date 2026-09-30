@@ -85,8 +85,10 @@ interface NodeInfo {
 /** 动态逻辑名：由请求内容填充；其他带 value 的条目按常量注入。 */
 const DYNAMIC_KEYS = new Set([
   "prompt", "negative", "image", "image2", "image3", "video", "audio",
-  "mask", "firstFrame", "lastFrame", "width", "height", "seed", "steps", "cfg", "duration",
+  "mask", "firstFrame", "lastFrame", "width", "height", "seed", "duration",
 ]);
+// 注意：steps / cfg 不在动态集合里——它们没有请求级动态值，
+// 写了 value 的条目由下面的常量注入统一处理。
 
 function str(value: unknown): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
