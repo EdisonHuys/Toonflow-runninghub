@@ -11,6 +11,7 @@
     "./types": "./types.d.ts",
     "./language/tfRouter": "./src/language/tfRouter.ts",
     "./language/deepSeek": "./src/language/deepSeek.ts",
-    "./media/tfRouter": "./src/media/tfRouter.ts"
+    "./media/tfRouter": "./src/media/tfRouter.ts",
+    "./media/runningHub": "./src/media/runningHub.ts"
   }
 }
