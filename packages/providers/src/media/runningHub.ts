@@ -10,7 +10,7 @@ const rules = [
     type: "input",
     field: "baseUrl" as const,
     title: "站点地址",
-    value: "https://www.runninghub.cn",
+    value: "https://www.runninghub.ai",
     props: { placeholder: "https://www.runninghub.cn 或 https://www.runninghub.ai" },
   },
   {
@@ -37,33 +37,47 @@ const rules = [
     type: "input",
     field: "imageWorkflowId" as const,
     title: "图片工作流 ID",
-    value: "",
+    value: "2105220020283482113",
     props: { placeholder: "工作流编辑页 URL 中 workflowId= 后的数字；AI 应用填 webappId= 后的数字" },
+  },
+  {
+    type: "input",
+    field: "imageEditWorkflowId" as const,
+    title: "图生图工作流 ID",
+    value: "2105219978530553857",
+    props: { placeholder: "图生图 / 图片编辑工作流的 workflowId" },
   },
   {
     type: "input",
     field: "videoWorkflowId" as const,
     title: "视频工作流 ID",
-    value: "",
+    value: "2100140635905974274",
     props: { placeholder: "同上，视频工作流 / AI 应用 ID" },
   },
   {
     type: "input",
     field: "imageNodeMap" as const,
     title: "图片节点映射 (JSON)",
-    value: '{\n  "prompt": { "nodeId": "6", "fieldName": "text" },\n  "image": { "nodeId": "10", "fieldName": "image" },\n  "width": { "nodeId": "5", "fieldName": "width" },\n  "height": { "nodeId": "5", "fieldName": "height" },\n  "seed": { "nodeId": "3", "fieldName": "seed" }\n}',
+    value: '{\n  "prompt": { "nodeId": "501", "fieldName": "text" },\n  "negative": { "nodeId": "482", "fieldName": "negative_prompt" },\n  "seed": { "nodeId": "487", "fieldName": "seed" },\n  "steps": { "nodeId": "487", "fieldName": "steps", "value": "40" },\n  "cfg": { "nodeId": "487", "fieldName": "cfg", "value": "1" }\n}',
     props: { type: "textarea", rows: 9, placeholder: '如 {"prompt": {"nodeId": "6", "fieldName": "text"}}' },
+  },
+  {
+    type: "input",
+    field: "imageEditNodeMap" as const,
+    title: "图生图节点映射 (JSON)",
+    value: '{\n  "prompt": { "nodeId": "152", "fieldName": "text" },\n  "negative": { "nodeId": "68", "fieldName": "negative_prompt" },\n  "image": { "nodeId": "191", "fieldName": "image" },\n  "seed": { "nodeId": "85", "fieldName": "seed" },\n  "steps": { "nodeId": "85", "fieldName": "steps", "value": "40" },\n  "cfg": { "nodeId": "85", "fieldName": "cfg", "value": "1" }\n}',
+    props: { type: "textarea", rows: 9, placeholder: '如 {"prompt": {"nodeId": "152", "fieldName": "text"}}' },
   },
   {
     type: "input",
     field: "videoNodeMap" as const,
     title: "视频节点映射 (JSON)",
-    value: '{\n  "prompt": { "nodeId": "6", "fieldName": "text" },\n  "image": { "nodeId": "10", "fieldName": "image" },\n  "duration": { "nodeId": "20", "fieldName": "value", "unit": "seconds" },\n  "seed": { "nodeId": "3", "fieldName": "seed" }\n}',
+    value: '{\n  "prompt": { "nodeId": "270", "fieldName": "text" },\n  "image": { "nodeId": "272", "fieldName": "image" },\n  "duration": { "nodeId": "271", "fieldName": "value", "unit": "seconds" },\n  "seed": { "nodeId": "255", "fieldName": "noise_seed" },\n  "audio": { "nodeId": "276", "fieldName": "audio" }\n}',
     props: { type: "textarea", rows: 9, placeholder: '如 {"prompt": {"nodeId": "6", "fieldName": "text"}}' },
   },
 ] as const;
 
-const version = "2.0.0";
+const version = "2.1.0";
 
 interface NodeMapping {
   nodeId: string;
@@ -289,12 +303,21 @@ async function runWorkflow(
   const taskKind = str(this.config.taskKind).trim() || "workflow";
   const instanceType = str(this.config.instanceType).trim() || "default";
   const other = otherOf(request);
-  const configuredId = mediaType === "image" ? str(this.config.imageWorkflowId).trim() : str(this.config.videoWorkflowId).trim();
+  // ACT: 图生图是独立模型，走独立的工作流 ID 与节点映射；必须带参考图。
+  const isEdit = mediaType === "image" && request.model === "runninghub-image-edit";
+  const configuredId =
+    mediaType === "video"
+      ? str(this.config.videoWorkflowId).trim()
+      : isEdit
+        ? str(this.config.imageEditWorkflowId).trim()
+        : str(this.config.imageWorkflowId).trim();
   const workflowId = str(other.workflowId).trim() || configuredId;
-  if (!workflowId) throw new Error(mediaType === "image" ? "请先配置图片工作流 ID" : "请先配置视频工作流 ID");
+  if (!workflowId)
+    throw new Error(isEdit ? "请先配置图生图工作流 ID" : mediaType === "image" ? "请先配置图片工作流 ID" : "请先配置视频工作流 ID");
+  if (isEdit && !(request as ImageRequest).images?.length) throw new Error("图生图工作流需要传入参考图");
   const nodeMap = parseNodeMap(
-    mediaType === "image" ? this.config.imageNodeMap : this.config.videoNodeMap,
-    mediaType === "image" ? "图片节点映射" : "视频节点映射",
+    mediaType === "video" ? this.config.videoNodeMap : isEdit ? this.config.imageEditNodeMap : this.config.imageNodeMap,
+    isEdit ? "图生图节点映射" : mediaType === "image" ? "图片节点映射" : "视频节点映射",
   );
 
   // ACT: 图片最多等待 15 分钟，视频 30 分钟。
@@ -412,6 +435,7 @@ export default {
 5. **节点映射 (JSON)**：告诉本供应商把提示词、参考图等填到你工作流的哪个节点。
    - ComfyUI 工作流：编辑页右上角「获取节点ID」复制节点编号，字段名就是节点输入框的名字（如 \`text\`、\`image\`、\`width\`）；
    - AI 应用：应用页「API 调用示例」里有完整的 nodeInfoList，直接照抄 nodeId 和 fieldName。
+6. **模型选择**：Toonflow 里选「图片工作流」走文生图，「图生图工作流」走图生图（必须带参考图），「视频工作流」走视频；三个模型各用各的工作流 ID 与节点映射。
 
 ### 节点映射写法
 
@@ -445,6 +469,14 @@ export default {
       label: "RunningHub 图片工作流",
       type: "image",
       mode: ["text", "singleImage", "multiReference"],
+      imageSizes: ["1K", "1.5K", "2K", "4K"],
+      imageRatios: ["1:1", "3:4", "4:3", "9:16", "16:9", "3:2", "2:3", "21:9"],
+    },
+    {
+      id: "runninghub-image-edit",
+      label: "RunningHub 图生图工作流",
+      type: "image",
+      mode: ["singleImage"],
       imageSizes: ["1K", "1.5K", "2K", "4K"],
       imageRatios: ["1:1", "3:4", "4:3", "9:16", "16:9", "3:2", "2:3", "21:9"],
     },
